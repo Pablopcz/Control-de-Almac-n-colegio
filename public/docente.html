@@ -65,10 +65,10 @@
         ========================================= */
     @media (max-width: 768px) {
       body {
-        margin: 10px;
+        margin: 8px;
       }
       
-      /* Cambia el contenedor general a una sola columna */
+      /* Cambia el contenedor general a una sola columna estricta */
       .container {
         grid-template-columns: 1fr;
         gap: 10px;
@@ -79,16 +79,21 @@
         grid-column: span 1;
       }
 
+      .card {
+        padding: 12px;
+        overflow-x: hidden;
+      }
+
       /* Corrige el encabezado superior amontonado en celulares */
       .header {
         flex-direction: column;
         align-items: flex-start;
-        gap: 12px;
-        padding: 15px;
+        gap: 10px;
+        padding: 12px;
       }
 
       .header h2 {
-        font-size: 1.25rem;
+        font-size: 1.15rem;
         margin: 0;
       }
 
@@ -104,16 +109,29 @@
         width: 100%;
       }
 
-      /* Hace que las tablas tengan scroll horizontal si no caben en la pantalla */
+      /* Contenedor de botones de activos adaptado a columna para que no se salgan */
+      .card div[style*="display: flex"] {
+        flex-direction: column !important;
+        gap: 8px !important;
+      }
+
+      .card div[style*="display: flex"] button,
+      .card div[style*="display: flex"] label {
+        width: 100% !important;
+        box-sizing: border-box;
+      }
+
+      /* Asegura que los filtros del catálogo se apilen en pantallas muy estrechas */
+      .filtros-container {
+        flex-direction: column;
+      }
+
+      /* Permite desplazamiento horizontal suave en todas las tablas sin romper el diseño */
       table {
         display: block;
         overflow-x: auto;
         white-space: nowrap;
-      }
-
-      /* Ajusta los contenedores de botones secundarios para que no se desborden */
-      .card div[style*="display: flex"] {
-        flex-direction: column;
+        -webkit-overflow-scrolling: touch;
       }
     }
   </style>
@@ -147,20 +165,22 @@
       <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
 
       <h3>2. Lista del Pedido Actual</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Elemento</th>
-            <th style="width: 20%;">Cant.</th>
-            <th style="width: 15%;">Acción</th>
-          </tr>
-        </thead>
-        <tbody id="tabla-carrito">
-          <tr>
-            <td colspan="3" style="text-align: center; color: #718096;">No has agregado elementos al pedido.</td>
-          </tr>
-        </tbody>
-      </table>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Elemento</th>
+              <th style="width: 20%;">Cant.</th>
+              <th style="width: 15%;">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-carrito">
+            <tr>
+              <td colspan="3" style="text-align: center; color: #718096;">No has agregado elementos al pedido.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
 
