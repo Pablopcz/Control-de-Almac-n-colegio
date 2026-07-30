@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Docente - Solicitud de Materiales</title>
+  <!-- Librería para exportar a Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f0f2f5; color: #333; }
+    .header { display: flex; justify-content: space-between; align-items: center; background: #2b6cb0; color: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
+    .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    .full-width { grid-column: span 2; }
+    label { font-weight: bold; font-size: 0.9em; display: block; margin-top: 10px; }
+    input, select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
+    button { background-color: #2b6cb0; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-agregar { background-color: #319795; margin-top: 10px; width: 100%; }
+    .btn-enviar { background-color: #38a169; width: 100%; font-size: 1.05em; margin-top: 15px; }
+    .btn-excel { background-color: #27ae60; }
+    .btn-eliminar { background-color: #e53e3e; padding: 4px 8px; font-size: 0.85em; }
+    .btn-salir { background-color: #e53e3e; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+    th { background-color: #2b6cb0; color: white; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85em; }
+    .badge-pendiente { background-color: #feebc8; color: #744210; }
+    .badge-entregado { background-color: #e2e8f0; color: #2d3748; }
+    .badge-devuelto { background-color: #c6f6d5; color: #22543d; }
+    .lista-items { margin: 0; padding-left: 18px; font-size: 0.9em; }
+
+    /* Estilos para la barra de búsqueda y categorías */
+    .filtros-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    
+    /* Contenedor con scroll para evitar que la tabla se alargue demasiado */
+    #tabla-mis-solicitudes-container {
+      max-height: 450px;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    /* Fija la cabecera de la tabla para que no se pierda al bajar con el scroll */
+    #tabla-mis-solicitudes-container table thead th {
+      position: sticky;
+      top: 0;
+      background-color: #2b6cb0;
+      color: white;
+      z-index: 10;
+    }
+
+    .filtros-container input {
+      flex: 2;
+    }
+    .filtros-container select {
+      flex: 1;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h2>Panel Docente - Solicitud de Materiales</h2>
+    <div>
+      <span id="nombre-docente"></span>
+      <button class="btn-salir" onclick="cerrarSesion()" style="margin-left:10px;">Cerrar Sesión</button>
+    </div>
+  </div>
+
+  <div class="container">
+    
+    <!-- LADO IZQUIERDO: Armar Pedido (Carrito) -->
+    <div class="card">
+      <h3>1. Seleccionar Insumos</h3>
+      
+      <label>Buscar Elemento:</label>
+      <select id="select-elemento">
+        <option value="">-- Cargando inventario... --</option>
+      </select>
+
+      <label>Cantidad requerida:</label>
+      <input type="number" id="cantidad-item" value="1" min="1">
+
+      <button type="button" class="btn-agregar" onclick="agregarAlCarrito()">➕ Agregar al Pedido</button>
+
+      <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+      <h3>2. Lista del Pedido Actual</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Elemento</th>
+            <th style="width: 20%;">Cant.</th>
+            <th style="width: 15%;">Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-carrito">
+          <tr>
+            <td colspan="3" style="text-align: center; color: #718096;">No has agregado elementos al pedido.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+      <label>Estudiante Final / Proyecto / Curso:</label>
+      <input type="text" id="estudiante-uso" placeholder="Ej: Juan Pérez / Grado 8-2">
+
+      <label>Días de Préstamo requeridos:</label>
+      <input type="number" id="dias-prestamo" value="1" min="1">
+
+      <!-- Botón Principal de Envío -->
+      <button type="button" class="btn-enviar" onclick="enviarSolicitud()">🚀 Confirmar y Enviar Solicitud General</button>
+
+      <!-- Botones de Activos de Operación -->
+      <div style="display: flex; gap: 10px; margin-top: 15px;">
+        <button type="button" onclick="descargarFormatoActivos()" style="flex: 1; background-color: #27ae60; color: white; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
+          📥 Descargar Formato Activos
+        </button>
+
+        <label for="subir-excel-activos" id="label-subir-archivo" style="flex: 1; background-color: #2b6cb0; color: white; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; text-align: center; display: inline-block; font-size: 0.9em; line-height: 1.5; margin-top: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          📤 Subir Archivo Activos
+        </label>
+        <input type="file" id="subir-excel-activos" accept=".xlsx, .xls" style="display: none;" onchange="procesarExcelSubido(event)">
+      </div>
+    </div>
+
+    <!-- LADO DERECHO: Catálogo disponible con Filtros -->
+    <div class="card">
+      <h3>Catálogo de Inventario Disponible</h3>
+      
+      <div class="filtros-container">
+        <input type="text" id="buscar-catalogo" placeholder="🔍 Buscar elemento..." onkeyup="filtrarCatalogo()">
+        <select id="filtro-categoria" onchange="filtrarCatalogo()">
+          <option value="">Todas las categorías</option>
+        </select>
+      </div>
+      
+      <div style="max-height: 480px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Nombre</th>
+              <th>Prestados</th>
+              <th>Disponible</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-catalogo"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TABLA INFERIOR: Mis Solicitudes Enviadas con Scroll y Filtro Ajustado -->
+    <div class="card full-width">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 style="margin: 0;">Mis Solicitudes Realizadas</h3>
+        <button class="btn-excel" onclick="descargarExcelMisPrestamos()">📊 Descargar Historial (Excel)</button>
+      </div>
+
+      <!-- Filtro por Estado con ancho controlado -->
+      <div style="margin-bottom: 12px; max-width: 250px;">
+        <select id="filtro-estado-prestamo" onchange="cargarMisPrestamos()" style="font-weight: 500;">
+          <option value="Pendiente">⚠️ Solo Pendientes</option>
+          <option value="">Todos los Estados</option>
+          <option value="Entregado">Entregados</option>
+          <option value="Devuelto">Devueltos</option>
+        </select>
+      </div>
+      
+      <div id="tabla-mis-solicitudes-container">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40%;">Lista de Elementos</th>
+              <th>Estudiante / Uso</th>
+              <th>Fecha Solicitud</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-mis-prestamos"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const API_URL = '/api';
+    let carrito = [];
+    let inventarioGlobal = [];
+
+    
+    // Validar Sesión al cargar
+const sesion = JSON.parse(localStorage.getItem('usuarioSesion'));
+if (!sesion || sesion.rol !== 'Docente') {
+  window.location.href = '/index.html';
+} else {
+  // Se usa 'nombre_completo' o 'nombre' dependiendo de lo que devuelva tu backend
+  document.getElementById('nombre-docente').textContent = `Docente: ${sesion.nombre_completo || sesion.nombre}`;
+}
+
+    function cerrarSesion() {
+      localStorage.removeItem('usuarioSesion');
+      window.location.href = '/index.html';
+    }
+
+    async function cargarDatos() {
+      try {
+        await cargarInventario();
+        await cargarMisPrestamos();
+      } catch (error) {
+        console.error("Error cargando datos iniciales:", error);
+      }
+    }
+
+    // CARGAR CATÁLOGO DE ELEMENTOS Y CATEGORÍAS
+    async function cargarInventario() {
+      const res = await fetch(`${API_URL}/elementos`);
+      if (!res.ok) throw new Error('No se pudo cargar el inventario');
+      inventarioGlobal = await res.json();
+      
+      const selectElemento = document.getElementById('select-elemento');
+      selectElemento.innerHTML = '<option value="">-- Selecciona un elemento --</option>';
+
+      inventarioGlobal.forEach(el => {
+        if (el.cantidad_disponible > 0) {
+          selectElemento.innerHTML += `<option value="${el._id}">${el.nombre} (Disponibles: ${el.cantidad_disponible})</option>`;
+        }
+      });
+
+      poblarCategorias();
+      filtrarCatalogo();
+    }
+
+    function poblarCategorias() {
+      const selectCategoria = document.getElementById('filtro-categoria');
+      const categoriasUnicas = new Set();
+      
+      inventarioGlobal.forEach(e => {
+        if (e.categoria) {
+          const nombreCat = typeof e.categoria === 'object' ? e.categoria.nombre : e.categoria;
+          if (nombreCat) categoriasUnicas.add(nombreCat);
+        }
+      });
+
+      selectCategoria.innerHTML = '<option value="">Todas las categorías</option>';
+      categoriasUnicas.forEach(cat => {
+        selectCategoria.innerHTML += `<option value="${cat}">${cat}</option>`;
+      });
+    }
+
+    function filtrarCatalogo() {
+      const texto = (document.getElementById('buscar-catalogo')?.value || '').toLowerCase();
+      const categoriaSeleccionada = document.getElementById('filtro-categoria')?.value || '';
+      const tbody = document.getElementById('tabla-catalogo');
+      if (!tbody) return;
+
+      const filtrados = inventarioGlobal.filter(e => {
+        const coincideTexto = e.nombre.toLowerCase().includes(texto) || (e.codigo_placa && e.codigo_placa.toLowerCase().includes(texto));
+        const nombreCat = typeof e.categoria === 'object' ? e.categoria?.nombre : e.categoria;
+        const coincideCategoria = categoriaSeleccionada === '' || nombreCat === categoriaSeleccionada;
+        return coincideTexto && coincideCategoria;
+      });
+
+      tbody.innerHTML = filtrados.map(e => {
+        const total = Number(e.cantidad_total || 0);
+        const disponible = Number(e.cantidad_disponible || 0);
+        const prestados = total - disponible;
+
+        return `
+          <tr>
+            <td><b>${e.codigo_placa || 'N/A'}</b></td>
+            <td>${e.nombre}</td>
+            <td><span style="color: orange; font-weight: bold;">${prestados}</span></td>
+            <td><span style="color: green; font-weight: bold;">${disponible}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // AGREGAR ÍTEM AL CARRITO
+    function agregarAlCarrito() {
+      const select = document.getElementById('select-elemento');
+      const elementoId = select.value;
+      const cantidad = Number(document.getElementById('cantidad-item').value);
+
+      if (!elementoId) {
+        alert('Por favor selecciona un elemento.');
+        return;
+      }
+
+      if (cantidad <= 0) {
+        alert('La cantidad debe ser al menos 1.');
+        return;
+      }
+
+      const elementoObjeto = inventarioGlobal.find(e => e._id === elementoId);
+      if (!elementoObjeto) return;
+
+      if (cantidad > elementoObjeto.cantidad_disponible) {
+        alert(`No hay suficiente stock. Disponible: ${elementoObjeto.cantidad_disponible}`);
+        return;
+      }
+
+      const existente = carrito.find(item => item.elemento === elementoId);
+      if (existente) {
+        if (existente.cantidad + cantidad > elementoObjeto.cantidad_disponible) {
+          alert(`Superas el stock disponible (${elementoObjeto.cantidad_disponible}) agregando más.`);
+          return;
+        }
+        existente.cantidad += cantidad;
+      } else {
+        carrito.push({
+          elemento: elementoId,
+          nombre: elementoObjeto.nombre,
+          cantidad: cantidad
+        });
+      }
+
+      renderizarCarrito();
+      select.value = '';
+      document.getElementById('cantidad-item').value = 1;
+    }
+
+    function eliminarDelCarrito(index) {
+      carrito.splice(index, 1);
+      renderizarCarrito();
+    }
+
+    function renderizarCarrito() {
+      const tbody = document.getElementById('tabla-carrito');
+      if (!tbody) return;
+      
+      if (carrito.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #718096;">No has agregado elementos al pedido.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = carrito.map((item, index) => `
+        <tr>
+          <td>${item.nombre}</td>
+          <td><b>${item.cantidad}</b></td>
+          <td><button class="btn-eliminar" onclick="eliminarDelCarrito(${index})">❌</button></td>
+        </tr>
+      `).join('');
+    }
+
+    // ENVIAR SOLICITUD AL BACKEND (/api/prestamos)
+    async function enviarSolicitud() {
+      if (carrito.length === 0) {
+        alert('Debes agregar al menos un elemento a la lista del pedido.');
+        return;
+      }
+
+      const estudiante = document.getElementById('estudiante-uso').value;
+      const dias = Number(document.getElementById('dias-prestamo').value);
+      const idDocente = sesion._id || sesion.id;
+
+      if (!estudiante.trim()) {
+        alert('Por favor indica el Estudiante Final / Proyecto / Curso.');
+        return;
+      }
+
+      const payload = {
+        solicitado_por: idDocente,
+        estudiante_final: estudiante.trim(),
+        dias_prestamo: dias || 1,
+        elementos: carrito.map(i => ({ 
+          elemento: i.elemento, 
+          cantidad: Number(i.cantidad) 
+        }))
+      };
+
+      try {
+        const res = await fetch(`${API_URL}/prestamos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          alert('✅ ¡Solicitud enviada exitosamente al Almacén!');
+          carrito = [];
+          renderizarCarrito();
+          document.getElementById('estudiante-uso').value = '';
+          document.getElementById('dias-prestamo').value = 1;
+          await cargarDatos();
+        } else {
+          alert(`⚠️ Error: ${data.mensaje || data.error || 'Fallo de validación en el servidor'}`);
+        }
+      } catch (error) {
+        alert('Error al conectar con el servidor.');
+        console.error(error);
+      }
+    }
+
+    // CARGAR HISTORIAL DEL DOCENTE CON FILTRO DE ESTADO
+    async function cargarMisPrestamos() {
+      try {
+        const res = await fetch(`${API_URL}/prestamos`);
+        if (!res.ok) throw new Error('No se pudo obtener el historial');
+        const todos = await res.json();
+
+        const idUsuarioActual = String(sesion._id || sesion.id).trim();
+        const estadoFiltro = document.getElementById('filtro-estado-prestamo')?.value || '';
+        
+        const misPrestamos = todos.filter(p => {
+          if (!p.solicitado_por) return false;
+          const idDocentePrestamo = typeof p.solicitado_por === 'object' 
+            ? String(p.solicitado_por._id || p.solicitado_por.id || '').trim() 
+            : String(p.solicitado_por).trim();
+          
+          const esDelUsuario = idDocentePrestamo === idUsuarioActual;
+          const coincideEstado = estadoFiltro === '' || (p.estado || 'Pendiente') === estadoFiltro;
+
+          return esDelUsuario && coincideEstado;
+        });
+
+        const tbody = document.getElementById('tabla-mis-prestamos');
+        if (!tbody) return;
+
+        if (misPrestamos.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#718096;">No se encontraron solicitudes con este filtro.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = misPrestamos.map(p => {
+          let badgeClass = p.estado === 'Pendiente' ? 'badge-pendiente' : (p.estado === 'Entregado' ? 'badge-entregado' : 'badge-devuelto');
+          
+          let htmlElementos = '<ul class="lista-items">';
+          if (p.elementos && p.elementos.length > 0) {
+            p.elementos.forEach(i => {
+              let nom = 'Elemento';
+              const refEl = i.elemento;
+              if (refEl) {
+                if (typeof refEl === 'object') {
+                  nom = refEl.nombre || refEl.descripcion || 'Elemento';
+                } else {
+                  const match = inventarioGlobal.find(el => String(el._id) === String(refEl));
+                  if (match) nom = match.nombre;
+                }
+              }
+              htmlElementos += `<li><b>${i.cantidad}x</b> ${nom}</li>`;
+            });
+          } else if (p.elemento) {
+            let nom = 'Elemento';
+            const refEl = p.elemento;
+            if (refEl) {
+              if (typeof refEl === 'object') {
+                nom = refEl.nombre || refEl.descripcion || 'Elemento';
+              } else {
+                const match = inventarioGlobal.find(el => String(el._id) === String(refEl));
+                if (match) nom = match.nombre;
+              }
+            }
+            htmlElementos += `<li><b>${p.cantidad_solicitada || 1}x</b> ${nom}</li>`;
+          }
+          htmlElementos += '</ul>';
+
+          const fechaFormateada = p.fecha_solicitud ? new Date(p.fecha_solicitud).toLocaleString('es-CO') : 'Reciente';
+
+          return `
+            <tr>
+              <td>${htmlElementos}</td>
+              <td>${p.estudiante_final || 'N/A'}</td>
+              <td>${fechaFormateada}</td>
+              <td><span class="badge ${badgeClass}">${p.estado || 'Pendiente'}</span></td>
+            </tr>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error("Error al cargar los préstamos del docente:", error);
+      }
+    }
+
+    // EXPORTAR HISTORIAL A EXCEL (Respeta el filtro aplicado)
+    // EXPORTAR HISTORIAL A EXCEL (Respeta el filtro aplicado)
+    async function descargarExcelMisPrestamos() {
+      try {
+        const res = await fetch(`${API_URL}/prestamos`);
+        const todos = await res.json();
+
+        const idUsuarioActual = String(sesion._id || sesion.id).trim();
+        const estadoFiltro = document.getElementById('filtro-estado-prestamo')?.value || '';
+
+        const misPrestamos = todos.filter(p => {
+          if (!p.solicitado_por) return false;
+          const idDocentePrestamo = typeof p.solicitado_por === 'object' 
+            ? String(p.solicitado_por._id || p.solicitado_por.id || '').trim() 
+            : String(p.solicitado_por).trim();
+          
+          const esDelUsuario = idDocentePrestamo === idUsuarioActual;
+          const coincideEstado = estadoFiltro === '' || (p.estado || 'Pendiente') === estadoFiltro;
+
+          return esDelUsuario && coincideEstado;
+        });
+
+        if (misPrestamos.length === 0) {
+          alert('No hay solicitudes registradas con este filtro para descargar.');
+          return;
+        }
+
+        const filasExcel = [];
+        misPrestamos.forEach(p => {
+          const fecha = p.fecha_solicitud ? new Date(p.fecha_solicitud).toLocaleString('es-CO') : 'Reciente';
+          const estudiante = p.estudiante_final || 'N/A';
+          const estado = p.estado || 'Pendiente';
+
+          if (p.elementos && p.elementos.length > 0) {
+            p.elementos.forEach(item => {
+              let nombreEl = 'N/A';
+              let placaEl = 'N/A';
+              const refEl = item.elemento;
+              if (refEl) {
+                if (typeof refEl === 'object') {
+                  nombreEl = refEl.nombre || 'N/A';
+                  placaEl = refEl.codigo_placa || 'N/A';
+                } else {
+                  const match = inventarioGlobal.find(el => String(el._id) === String(refEl));
+                  if (match) {
+                    nombreEl = match.nombre;
+                    placaEl = match.codigo_placa || 'N/A';
+                  }
+                }
+              }
+              filasExcel.push({
+                'Fecha Solicitud': fecha,
+                'Estudiante / Proyecto / Curso': estudiante,
+                'Elemento': nombreEl,
+                'Placa / Código': placaEl,
+                'Cantidad': item.cantidad,
+                'Estado': estado
+              });
+            });
+          } else if (p.elemento) {
+            let nombreEl = 'N/A';
+            let placaEl = 'N/A';
+            const refEl = p.elemento;
+            if (refEl) {
+              if (typeof refEl === 'object') {
+                nombreEl = refEl.nombre || 'N/A';
+                placaEl = refEl.codigo_placa || 'N/A';
+              } else {
+                const match = inventarioGlobal.find(el => String(el._id) === String(refEl));
+                if (match) {
+                  nombreEl = match.nombre;
+                  placaEl = match.codigo_placa || 'N/A';
+                }
+              }
+            }
+            filasExcel.push({
+              'Fecha Solicitud': fecha,
+              'Estudiante / Proyecto / Curso': estudiante,
+              'Elemento': nombreEl,
+              'Placa / Código': placaEl,
+              'Cantidad': p.cantidad_solicitada || 1,
+              'Estado': estado
+            });
+          }
+        });
+
+        const hoja = XLSX.utils.json_to_sheet(filasExcel);
+        const libro = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(libro, hoja, "Mis Solicitudes");
+
+        // Uso seguro del nombre del docente (verifica nombre_completo o nombre)
+        const nombreDocente = sesion.nombre_completo || sesion.nombre || 'Docente';
+        const nombreArchivo = `Mis_Solicitudes_${nombreDocente.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        XLSX.writeFile(libro, nombreArchivo);
+
+      } catch (error) {
+        alert('Error al generar el archivo Excel.');
+        console.error(error);
+      }
+    }
+
+    // FUNCIONES PARA ACTIVOS DE OPERACIÓN
+    function procesarExcelSubido(event) {
+  const archivo = event.target.files[0];
+  if (!archivo) return;
+
+  document.getElementById('label-subir-archivo').textContent =
+    `📂 ${archivo.name}`;
+
+  const lector = new FileReader();
+
+  lector.onload = async function(e) {
+
+    try {
+
+      const datosBinarios = new Uint8Array(e.target.result);
+      const libro = XLSX.read(datosBinarios, { type: 'array' });
+
+      const nombreHoja = libro.SheetNames[0];
+      const hoja = libro.Sheets[nombreHoja];
+
+      
+
+    
+      const formData = new FormData();
+
+formData.append('archivo', archivo);
+
+formData.append(
+  'docente',
+  sesion.nombre_completo || sesion.nombre
+);
+
+const respuesta = await fetch(
+  '/api/activos',
+  {
+    method: 'POST',
+    body: formData
+  }
+);
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(data.mensaje);
+      }
+
+      alert('✅ Solicitud de Activos enviada correctamente al Almacén');
+
+    } catch (error) {
+
+      console.error(error);
+
+      alert('❌ Error al enviar la solicitud de activos');
+
+    } finally {
+
+      event.target.value = '';
+
+    }
+
+  };
+
+  lector.readAsArrayBuffer(archivo);
+
+}
+function descargarFormatoActivos() {
+  window.open(
+    '/api/descargar-formato-activos',
+    '_blank'
+  );
+}
+
+window.addEventListener(
+  'DOMContentLoaded',
+  cargarDatos
+);
+  </script>
+</body>
+</html>

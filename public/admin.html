@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Administrador - Gestión de Almacén</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    * { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { margin: 20px; background-color: #f0f2f5; color: #333; }
+    .banner-alerta { background-color: #e53e3e; color: white; padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; font-weight: bold; text-align: center; font-size: 1.1em; display: none; }
+    .header { display: flex; justify-content: space-between; align-items: center; background: #1a365d; color: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
+    .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    .full-width { grid-column: span 2; }
+    label { font-weight: bold; font-size: 0.9em; display: block; margin-top: 10px; }
+    input, select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
+    button { background-color: #2b6cb0; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-entregar { background-color: #38a169; }
+    .btn-devolver { background-color: #319795; }
+    .btn-excel { background-color: #27ae60; }
+    .btn-salir { background-color: #e53e3e; }
+    .btn-eliminar { background-color: #e53e3e; }
+    .btn-masivo { background-color: #2b6cb0; margin-right: 5px; }
+    .badge-pendientes { background-color: #e53e3e; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.85em; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+    th { background-color: #2b6cb0; color: white; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85em; }
+    .badge-pendiente { background-color: #feebc8; color: #744210; }
+    .badge-entregado { background-color: #e2e8f0; color: #2d3748; }
+    .badge-devuelto { background-color: #c6f6d5; color: #22543d; }
+    .lista-items { margin: 0; padding-left: 18px; font-size: 0.9em; }
+    .filtros-container { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; }
+    .filtros-container input { flex: 2; }
+    .filtros-container select { flex: 1; font-weight: 500; }
+    .acciones-masivas { background: #edf2f7; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #cbd5e0; }
+  </style>
+</head>
+<body>
+
+  <!-- BANNER ALERTA SUPERIOR -->
+  <div id="banner-alerta" class="banner-alerta">
+    🔔 ¡ATENCIÓN! TIENES <span id="cant-alerta">0</span> SOLICITUD(ES) PENDIENTE(S) POR ENTREGAR
+  </div>
+
+  <div class="header">
+    <h2>Panel de Gestión de Almacén</h2>
+    <div>
+      <span id="nombre-admin"></span>
+      <span id="badge-pendientes-header" class="badge-pendientes" style="margin-left: 10px;">0 Pendientes</span>
+      <button class="btn-salir" onclick="cerrarSesion()" style="margin-left:10px;">Cerrar Sesión</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- FORMULARIO CREAR / EDITAR ELEMENTO -->
+    <div class="card">
+      <h3 id="titulo-form-elemento">Registrar Nuevo Elemento / Insumo</h3>
+      <input type="hidden" id="elemento-id">
+      
+      <label>Código / Placa:</label>
+      <input type="text" id="elem-codigo" placeholder="Ej: ROB-ARD-001">
+
+      <label>Nombre del Elemento:</label>
+      <input type="text" id="elem-nombre" placeholder="Ej: Arduino Uno R3">
+
+      <label>Categoría:</label>
+      <select id="elem-categoria">
+        <option value="Microcontroladores">Microcontroladores</option>
+        <option value="Sensores">Sensores</option>
+        <option value="Herramientas">Herramientas</option>
+        <option value="Componentes">Componentes</option>
+        <option value="Otros">Otros</option>
+      </select>
+
+      <label>Ubicación Física en Almacén:</label>
+      <input type="text" id="elem-ubicacion" placeholder="Ej: Estante A - Caja 1">
+
+      <div style="display: flex; gap: 10px;">
+        <div style="flex: 1;">
+          <label>Cantidad Total:</label>
+          <input type="number" id="elem-total" value="1" min="1">
+        </div>
+        <div style="flex: 1;">
+          <label>Cantidad Disponible:</label>
+          <input type="number" id="elem-disponible" value="1" min="0">
+        </div>
+      </div>
+
+      <!-- Botón de Guardar Individual -->
+      <button type="button" class="btn-enviar" onclick="guardarElemento()" style="margin-top: 15px; width: 100%; font-size: 0.95em;">💾 Guardar Inventario Individual</button>
+
+      <!-- Input de archivo oculto para la carga masiva -->
+      <input type="file" id="subir-excel-inventario" accept=".xlsx, .xls" style="display: none;" onchange="procesarExcelInventarioMasivo(event)">
+
+      <!-- Botones inferiores de Descargar Plantilla y Carga Masiva -->
+      <div style="display: flex; gap: 10px; margin-top: 15px;">
+        <button type="button" onclick="descargarPlantillaInventario()" style="flex: 1; background-color: #27ae60; color: white; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.95em;">
+          📥 Descargar Plantilla
+        </button>
+
+        <button type="button" onclick="document.getElementById('subir-excel-inventario').click()" style="flex: 1; background-color: #2b6cb0; color: white; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.95em;">
+          💾 Guardar Elemento Inventario Masivo
+        </button>
+      </div>
+    </div>
+
+    <!-- REGISTRAR DOCENTE -->
+    <div class="card">
+      <h3>Registrar Nuevo Docente</h3>
+      <label>Usuario / Código / Cédula:</label>
+      <input type="text" id="doc-usuario" placeholder="Ej: doc123">
+
+      <label>Nombre Completo:</label>
+      <input type="text" id="doc-nombre" placeholder="Ej: Ing. Pedro Gómez">
+
+      <label>Contraseña de Acceso:</label>
+      <input type="password" id="doc-password" placeholder="••••••••">
+
+      <button type="button" onclick="registrarDocente()" style="margin-top: 15px; width: 100%;">➕ Crear Usuario Docente</button>
+    </div>
+
+    <!-- TABLA DE INVENTARIO ACTUAL -->
+    <div class="card full-width">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 style="margin: 0;">Inventario Actual</h3>
+        <button class="btn-excel" onclick="descargarExcelInventario()">📊 Descargar Inventario (Excel)</button>
+      </div>
+
+      <div class="filtros-container">
+        <input type="text" id="buscar-inventario" placeholder="🔍 Buscar elemento..." onkeyup="filtrarInventario()">
+        <select id="filtro-categoria-inv" onchange="filtrarInventario()">
+          <option value="">Todas las categorías</option>
+        </select>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Nombre</th>
+            <th>Categoría</th>
+            <th>Ubicación</th>
+            <th>Prestados</th>
+            <th>Disponible</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-inventario"></tbody>
+      </table>
+    </div>
+
+    <!-- BANDEJA DE SOLICITUDES -->
+    <div class="card full-width">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 style="margin: 0;">Bandeja de Solicitudes y Entregas</h3>
+        <button class="btn-excel" onclick="descargarExcelPrestamos()">📊 Descargar Historial Pedidos (Excel)</button>
+      </div>
+
+      <div class="filtros-container">
+        <input type="text" id="buscar-solicitud" placeholder="🔍 Buscar..." onkeyup="filtrarPrestamos()">
+        <select id="filtro-estado-sol" onchange="filtrarPrestamos()">
+          <option value="Pendiente">⚠️ Solo Pendientes</option>
+          <option value="">Todos los Estados</option>
+          <option value="Entregado">Entregados</option>
+          <option value="Devuelto">Devueltos</option>
+        </select>
+      </div>
+
+      <!-- BARRA DE ACCIONES MASIVAS -->
+      <div class="acciones-masivas">
+        <div>
+          <button class="btn-masivo" onclick="seleccionarTodosPrestamos()">☑️ Seleccionar Todos</button>
+          <button class="btn-masivo" style="background-color: #e2e8f0; color: #2d3748;" onclick="deseleccionarTodosPrestamos()">❌ Deseleccionar Todos</button>
+        </div>
+        <div>
+          <span id="contador-seleccionados" style="font-weight: bold; margin-right: 15px; color: #2b6cb0;">0 seleccionados</span>
+          <button class="btn-entregar" onclick="procesarSeleccionados('entregar')" style="margin-right: 5px;">📦 Entregar Seleccionados</button>
+          <button class="btn-devolver" onclick="procesarSeleccionados('devolver')">🔄 Recibir Seleccionados</button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40px; text-align: center;"><input type="checkbox" id="chk-principal" onclick="toggleSeleccionarTodos(this)"></th>
+            <th style="width: 28%;">Elemento (Cant.)</th>
+            <th>Docente Solicita</th>
+            <th>Estudiante / Uso</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-prestamos"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- SOLICITUDES ACTIVOS DE OPERACIÓN -->
+  <div class="card full-width">
+    <h3>📦 Solicitudes Activos de Operación</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Docente</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+          <th style="width:300px;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-activos-operacion"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+    let inventarioGlobal = [];
+    let prestamosGlobales = [];
+    let activosOperacion = [];
+
+    // Validar Sesión Normalizando Mayúsculas/Minúsculas
+    const sesion = JSON.parse(localStorage.getItem('usuarioSesion'));
+    const rolNormalizado = sesion && sesion.rol ? sesion.rol.toLowerCase() : '';
+
+    if (!sesion || (rolNormalizado !== 'admin' && rolNormalizado !== 'administrador')) {
+      window.location.href = '/index.html';
+    } else {
+      const nombreUsuario = sesion.nombre_completo || sesion.nombre || sesion.usuario;
+      document.getElementById('nombre-admin').textContent = `Admin: ${nombreUsuario}`;
+    }
+
+    async function cargarActivosOperacion() {
+      try {
+        const res = await fetch('/api/activos');
+        activosOperacion = await res.json();
+        const tbody = document.getElementById('tabla-activos-operacion');
+
+        if (activosOperacion.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="4" style="text-align:center;">
+                  No hay solicitudes
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = activosOperacion.map(a => `
+          <tr>
+            <td>${a.solicitado_por || 'Sin nombre'}</td>
+            <td>${new Date(a.createdAt).toLocaleString('es-CO')}</td>
+            <td>${a.estado}</td>
+            <td style="white-space: nowrap;">
+              <a href="/uploads/activos/${a.archivo}" download="${a.archivo}" class="btn-excel" style="text-decoration:none; padding:10px 15px; border-radius:4px; color:white; display:inline-block; margin-right:5px;">
+                ⬇ Descargar
+              </a>
+              <button class="btn-eliminar" onclick="eliminarActivoOperacion('${a._id || a.id}')">
+                🗑️ Eliminar
+              </button>
+            </td>
+          </tr>
+        `).join('');
+
+      } catch(error) {
+        console.error(error);
+      }
+    }
+
+    window.addEventListener('focus', () => {
+      cargarDatos();
+    });
+
+    function descargarPlantillaInventario() {
+      const datos = [
+        ["Código / Placa", "Nombre del Elemento", "Categoría", "Ubicación Física", "Cantidad Total", "Cantidad Disponible"],
+        ["ROB-ARD-001", "Arduino Uno R3", "Microcontroladores", "Estante A - Caja 1", 10, 10]
+      ];
+
+      const hoja = XLSX.utils.aoa_to_sheet(datos);
+      hoja['!cols'] = [
+        { wch: 18 }, { wch: 25 }, { wch: 20 }, { wch: 22 }, { wch: 15 }, { wch: 18 }
+      ];
+
+      const celdasCabecera = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1'];
+      celdasCabecera.forEach(celda => {
+        if (!hoja[celda]) return;
+        hoja[celda].s = {
+          fill: { fgColor: { rgb: "1A365D" } },
+          font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+          alignment: { horizontal: "center", vertical: "center" }
+        };
+      });
+
+      const celdasEjemplo = ['A2', 'B2', 'C2', 'D2', 'E2', 'F2'];
+      celdasEjemplo.forEach(celda => {
+        if (!hoja[celda]) return;
+        hoja[celda].s = {
+          font: { name: "Segoe UI", sz: 10, italic: true, color: { rgb: "555555" } },
+          alignment: { horizontal: "left", vertical: "center" }
+        };
+      });
+
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Plantilla_Inventario");
+      XLSX.writeFile(libro, "Plantilla_Carga_Inventario.xlsx");
+    }
+
+    // FUNCIÓN PARA PROCESAR LA CARGA MASIVA DE EXCEL Y GUARDAR EN LA BD
+// FUNCIÓN MEJORADA PARA DEPURAR EL ERROR EXACTO
+    async function procesarExcelInventarioMasivo(event) {
+      const archivo = event.target.files[0];
+      if (!archivo) return;
+
+      const lector = new FileReader();
+      lector.onload = async function(e) {
+        try {
+          const datosBinarios = new Uint8Array(e.target.result);
+          const libro = XLSX.read(datosBinarios, { type: 'array' });
+          const hoja = libro.Sheets[libro.SheetNames[0]];
+          const filas = XLSX.utils.sheet_to_json(hoja);
+
+          if (filas.length === 0) {
+            alert('⚠️ El archivo Excel está vacío.');
+            return;
+          }
+
+          if (!confirm(`¿Deseas registrar masivamente estos ${filas.length} elementos en el almacén?`)) {
+            event.target.value = '';
+            return;
+          }
+
+          console.log("Enviando filas al servidor:", filas); // Para ver en la consola (F12)
+
+          const respuesta = await fetch(`${API_URL}/elementos/masivo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(filas)
+          });
+
+          // Intentamos leer la respuesta como JSON o texto plano
+          const textoRespuesta = await respuesta.text();
+          let resultado;
+          try {
+            resultado = JSON.parse(textoRespuesta);
+          } catch (err) {
+            resultado = { mensaje: textoRespuesta };
+          }
+
+          if (respuesta.ok) {
+            alert(`✅ ${resultado.mensaje || 'Carga masiva realizada con éxito.'}`);
+            cargarInventario();
+          } else {
+            alert(`⚠️ Error del Servidor (${respuesta.status}): ${resultado.mensaje || 'No se pudo procesar la carga masiva.'}`);
+          }
+        } catch (error) {
+          console.error("Error detallado:", error);
+          alert(`❌ Ocurrió un error técnico: ${error.message}`);
+        } finally {
+          event.target.value = ''; // Limpiar input file
+        }
+      };
+      lector.readAsArrayBuffer(archivo);
+    }
+
+    function cerrarSesion() {
+      localStorage.removeItem('usuarioSesion');
+      window.location.href = '/index.html';
+    }
+
+    async function eliminarActivoOperacion(id) {
+      if (!confirm('¿Desea eliminar esta solicitud y su archivo?')) return;
+
+      try {
+        const res = await fetch(`/api/activos/${id}`, {
+          method: 'DELETE'
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          alert('✅ Solicitud eliminada');
+          cargarActivosOperacion();
+        } else {
+          alert(data.mensaje || 'Error al eliminar');
+        }
+      } catch(error) {
+        console.error(error);
+        alert('❌ Error al eliminar');
+      }
+    }
+
+    async function cargarDatos() {
+      await Promise.all([
+        cargarInventario(),
+        cargarPrestamos(),
+        cargarActivosOperacion()
+      ]);
+    }
+
+    // CARGAR INVENTARIO
+    async function cargarInventario() {
+      try {
+        const res = await fetch(`${API_URL}/elementos`);
+        inventarioGlobal = await res.json();
+        poblarCategoriasInventario();
+        filtrarInventario();
+      } catch(e) {
+        console.error("Error al cargar inventario", e);
+      }
+    }
+
+    function poblarCategoriasInventario() {
+      const select = document.getElementById('filtro-categoria-inv');
+      const cats = new Set(inventarioGlobal.map(e => typeof e.categoria === 'object' ? e.categoria?.nombre : e.categoria).filter(Boolean));
+      select.innerHTML = '<option value="">Todas las categorías</option>';
+      cats.forEach(c => select.innerHTML += `<option value="${c}">${c}</option>`);
+    }
+
+    function filtrarInventario() {
+      const texto = (document.getElementById('buscar-inventario')?.value || '').toLowerCase();
+      const catSel = document.getElementById('filtro-categoria-inv')?.value || '';
+      const tbody = document.getElementById('tabla-inventario');
+
+      const filtrados = inventarioGlobal.filter(e => {
+        const nomCat = typeof e.categoria === 'object' ? e.categoria?.nombre : e.categoria;
+        const coincideTexto = (e.nombre || '').toLowerCase().includes(texto) || (e.codigo_placa || '').toLowerCase().includes(texto);
+        const coincideCat = catSel === '' || nomCat === catSel;
+        return coincideTexto && coincideCat;
+      });
+
+      tbody.innerHTML = filtrados.map(e => {
+        const total = Number(e.cantidad_total || 0);
+        const disponible = Number(e.cantidad_disponible || 0);
+        const prestados = total - disponible;
+        const nomCat = typeof e.categoria === 'object' ? e.categoria?.nombre : e.categoria;
+
+        return `
+          <tr>
+            <td><b>${e.codigo_placa}</b></td>
+            <td>${e.nombre}</td>
+            <td>${nomCat || ''}</td>
+            <td>${e.ubicacion || 'N/A'}</td>
+            <td><span style="color: orange; font-weight: bold;">${prestados}</span></td>
+            <td><span style="color: green; font-weight: bold;">${disponible}</span></td>
+            <td><b>${total}</b></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // CARGAR Y RENDERIZAR PRÉSTAMOS
+    async function cargarPrestamos() {
+      try {
+        const res = await fetch(`${API_URL}/prestamos`);
+        prestamosGlobales = await res.json();
+
+        const pendientes = prestamosGlobales.filter(p => p.estado === 'Pendiente').length;
+        const banner = document.getElementById('banner-alerta');
+        const cantAlerta = document.getElementById('cant-alerta');
+        const badgeHeader = document.getElementById('badge-pendientes-header');
+
+        if (pendientes > 0) {
+          banner.style.display = 'block';
+          cantAlerta.textContent = pendientes;
+          badgeHeader.textContent = `🔔 ${pendientes} Pendiente(s)`;
+        } else {
+          banner.style.display = 'none';
+          badgeHeader.textContent = `0 Pendientes`;
+        }
+
+        filtrarPrestamos();
+      } catch(e) {
+        console.error("Error al cargar préstamos", e);
+      }
+    }
+
+    function filtrarPrestamos() {
+      const texto = (document.getElementById('buscar-solicitud')?.value || '').toLowerCase();
+      const estadoSel = document.getElementById('filtro-estado-sol')?.value || '';
+      const tbody = document.getElementById('tabla-prestamos');
+
+      const filtrados = prestamosGlobales.filter(p => {
+        let nomDoc = '';
+        const docRef = p.solicitado_por || p.docente || p.usuario;
+        if (docRef) {
+          if (typeof docRef === 'object') {
+            nomDoc = docRef.nombre || docRef.nombre_completo || docRef.nombres || docRef.usuario || '';
+          }
+        }
+        const estUso = p.estudiante_final || p.uso || '';
+        
+        const coincideTexto = nomDoc.toLowerCase().includes(texto) || estUso.toLowerCase().includes(texto);
+        const coincideEstado = estadoSel === '' || p.estado === estadoSel;
+
+        return coincideTexto && coincideEstado;
+      });
+
+      if (filtrados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#718096;">No hay solicitudes que coincidan con el filtro.</td></tr>`;
+        actualizarContadorSeleccionados();
+        return;
+      }
+
+      tbody.innerHTML = filtrados.map(p => {
+        let badgeClass = p.estado === 'Pendiente' ? 'badge-pendiente' : (p.estado === 'Entregado' ? 'badge-entregado' : 'badge-devuelto');
+        
+        let nombreDocente = 'Docente Desconocido';
+        const docRef = p.solicitado_por || p.docente || p.usuario;
+        if (docRef) {
+          if (typeof docRef === 'object') {
+            nombreDocente = docRef.nombre || docRef.nombre_completo || docRef.nombres || docRef.usuario || 'Docente Desconocido';
+          } else {
+            nombreDocente = String(docRef);
+          }
+        }
+
+        let htmlElementos = '<ul class="lista-items">';
+        
+        const extraerNombreElemento = (refElemento) => {
+          if (!refElemento) return 'Elemento';
+          if (typeof refElemento === 'object') {
+            return refElemento.nombre || refElemento.descripcion || refElemento.titulo || 'Elemento';
+          }
+          const encontrado = inventarioGlobal.find(el => String(el._id || el.id || el.codigo_placa) === String(refElemento));
+          return encontrado ? encontrado.nombre : 'Elemento';
+        };
+
+        if (p.elementos && Array.isArray(p.elementos) && p.elementos.length > 0) {
+          p.elementos.forEach(i => {
+            const cantidad = i.cantidad || 1;
+            const nomElem = extraerNombreElemento(i.elemento || i.item);
+            htmlElementos += `<li><b>${cantidad}x</b> ${nomElem}</li>`;
+          });
+        } else if (p.elemento || p.item) {
+          const cantidad = p.cantidad_solicitada || p.cantidad || 1;
+          const nomElem = extraerNombreElemento(p.elemento || p.item);
+          htmlElementos += `<li><b>${cantidad}x</b> ${nomElem}</li>`;
+        } else {
+          htmlElementos += `<li><b>1x</b> Elemento no especificado</li>`;
+        }
+        htmlElementos += '</ul>';
+
+        let botonAccion = '';
+        if (p.estado === 'Pendiente') {
+          botonAccion = `<button class="btn-entregar" onclick="entregarPrestamo('${p._id || p.id}')">📦 Entregar</button>`;
+        } else if (p.estado === 'Entregado') {
+          botonAccion = `<button class="btn-devolver" onclick="devolverPrestamo('${p._id || p.id}')">🔄 Recibir Devolución</button>`;
+        } else {
+          botonAccion = `<span style="color:#718096; font-size:0.85em;">Completado</span>`;
+        }
+
+        const pid = p._id || p.id;
+        return `
+          <tr>
+            <td style="text-align: center;"><input type="checkbox" class="chk-prestamo" value="${pid}" onchange="actualizarContadorSeleccionados()"></td>
+            <td>${htmlElementos}</td>
+            <td><b>${nombreDocente}</b></td>
+            <td>${p.estudiante_final || p.uso || 'N/A'}</td>
+            <td><span class="badge ${badgeClass}">${p.estado}</span></td>
+            <td>${botonAccion}</td>
+          </tr>
+        `;
+      }).join('');
+
+      actualizarContadorSeleccionados();
+    }
+
+    function seleccionarTodosPrestamos() {
+      const checkboxes = document.querySelectorAll('.chk-prestamo');
+      checkboxes.forEach(chk => chk.checked = true);
+      const chkPrincipal = document.getElementById('chk-principal');
+      if (chkPrincipal) chkPrincipal.checked = true;
+      actualizarContadorSeleccionados();
+    }
+
+    function deseleccionarTodosPrestamos() {
+      const checkboxes = document.querySelectorAll('.chk-prestamo');
+      checkboxes.forEach(chk => chk.checked = false);
+      const chkPrincipal = document.getElementById('chk-principal');
+      if (chkPrincipal) chkPrincipal.checked = false;
+      actualizarContadorSeleccionados();
+    }
+
+    function toggleSeleccionarTodos(master) {
+      const checkboxes = document.querySelectorAll('.chk-prestamo');
+      checkboxes.forEach(chk => chk.checked = master.checked);
+      actualizarContadorSeleccionados();
+    }
+
+    function actualizarContadorSeleccionados() {
+      const seleccionados = document.querySelectorAll('.chk-prestamo:checked');
+      const contadorEl = document.getElementById('contador-seleccionados');
+      if (contadorEl) {
+        contadorEl.textContent = `${seleccionados.length} seleccionado(s)`;
+      }
+    }
+
+    async function procesarSeleccionados(accion) {
+      const seleccionados = document.querySelectorAll('.chk-prestamo:checked');
+      if (seleccionados.length === 0) {
+        alert('⚠️ Por favor selecciona al menos un elemento de la lista.');
+        return;
+      }
+
+      const ids = Array.from(seleccionados).map(chk => chk.value);
+      const nombreAccion = accion === 'entregar' ? 'ENTREGAR' : 'RECIBIR DEVOLUCIÓN DE';
+      
+      if (!confirm(`¿Estás seguro de procesar masivamente (${nombreAccion}) los ${ids.length} elementos seleccionados?`)) {
+        return;
+      }
+
+      let exitos = 0;
+      let errores = 0;
+
+      for (const id of ids) {
+        try {
+          const endpoint = accion === 'entregar' ? `${API_URL}/prestamos/${id}/entregar` : `${API_URL}/prestamos/${id}/devolver`;
+          const res = await fetch(endpoint, { method: 'PUT' });
+          if (res.ok) {
+            exitos++;
+          } else {
+            errores++;
+          }
+        } catch(e) {
+          errores++;
+        }
+      }
+
+      alert(`✅ Proceso masivo completado.\n- Exitosos: ${exitos}\n- Con errores/omitidos: ${errores}`);
+      cargarDatos();
+    }
+
+    async function entregarPrestamo(id) {
+      if (!confirm('¿Deseas marcar este préstamo como ENTREGADO y descontar stock del inventario?')) return;
+      
+      try {
+        const res = await fetch(`${API_URL}/prestamos/${id}/entregar`, { method: 'PUT' });
+        const data = await res.json();
+        if (res.ok) {
+          alert('✅ Préstamo entregado correctamente.');
+          cargarDatos();
+        } else {
+          alert(`⚠️ ${data.mensaje || 'Error al autorizar la entrega'}`);
+        }
+      } catch (e) {
+        alert('Error de conexión con el servidor.');
+      }
+    }
+
+    async function devolverPrestamo(id) {
+      if (!confirm('¿Deseas registrar la DEVOLUCIÓN y restituir el stock al inventario?')) return;
+
+      try {
+        const res = await fetch(`${API_URL}/prestamos/${id}/devolver`, { method: 'PUT' });
+        const data = await res.json();
+        if (res.ok) {
+          alert('✅ Devolución registrada con éxito.');
+          cargarDatos();
+        } else {
+          alert(`⚠️ ${data.mensaje || 'Error al registrar devolución'}`);
+        }
+      } catch (e) {
+        alert('Error de conexión con el servidor.');
+      }
+    }
+
+    async function guardarElemento() {
+      const codigo = document.getElementById('elem-codigo').value;
+      const nombre = document.getElementById('elem-nombre').value;
+      const categoria = document.getElementById('elem-categoria').value;
+      const ubicacion = document.getElementById('elem-ubicacion').value;
+      const total = Number(document.getElementById('elem-total').value);
+      const disponible = Number(document.getElementById('elem-disponible').value);
+
+      if (!codigo || !nombre) {
+        alert('El código y nombre del elemento son obligatorios.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/elementos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            codigo_placa: codigo,
+            nombre: nombre,
+            categoria: categoria,
+            ubicacion: ubicacion,
+            cantidad_total: total,
+            cantidad_disponible: disponible
+          })
+        });
+
+        if (res.ok) {
+          alert('✅ Elemento guardado correctamente.');
+          document.getElementById('elem-codigo').value = '';
+          document.getElementById('elem-nombre').value = '';
+          cargarInventario();
+        } else {
+          alert('Error al guardar el elemento.');
+        }
+      } catch (e) {
+        alert('Error de red al guardar.');
+      }
+    }
+
+    async function registrarDocente() {
+      const usuario = document.getElementById('doc-usuario').value;
+      const nombre = document.getElementById('doc-nombre').value;
+      const password = document.getElementById('doc-password').value;
+
+      if (!usuario || !nombre || !password) {
+        alert('Todos los campos son requeridos para registrar un docente.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/usuarios`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            usuario: usuario,
+            nombre_completo: nombre,
+            password: password,
+            rol: 'Docente'
+          })
+        });
+
+        if (res.ok) {
+          alert('✅ Docente creado exitosamente.');
+          document.getElementById('doc-usuario').value = '';
+          document.getElementById('doc-nombre').value = '';
+          document.getElementById('doc-password').value = '';
+        } else {
+          alert('Error al crear el docente.');
+        }
+      } catch (e) {
+        alert('Error al conectar con el servidor.');
+      }
+    }
+
+    function descargarExcelInventario() {
+      const filas = inventarioGlobal.map(e => {
+        const total = Number(e.cantidad_total || 0);
+        const disponible = Number(e.cantidad_disponible || 0);
+        const prestados = total - disponible;
+        return {
+          'Código / Placa': e.codigo_placa,
+          'Nombre': e.nombre,
+          'Categoría': typeof e.categoria === 'object' ? e.categoria?.nombre : e.categoria,
+          'Ubicación': e.ubicacion || 'N/A',
+          'Prestados': prestados,
+          'Disponible': disponible,
+          'Total': total
+        };
+      });
+      const hoja = XLSX.utils.json_to_sheet(filas);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Inventario");
+      XLSX.writeFile(libro, "Inventario_Almacen.xlsx");
+    }
+
+    function descargarExcelPrestamos() {
+      const filas = [];
+      prestamosGlobales.forEach(p => {
+        const docRef = p.solicitado_por || p.docente || p.usuario;
+        let docente = 'N/A';
+        if (docRef) {
+          if (typeof docRef === 'object') {
+            docente = docRef.nombre || docRef.nombre_completo || docRef.nombres || docRef.usuario || 'N/A';
+          } else {
+            docente = String(docRef);
+          }
+        }
+        const fecha = new Date(p.fecha_solicitud || p.createdAt).toLocaleString('es-CO');
+        
+        if (p.elementos && p.elementos.length > 0) {
+          p.elementos.forEach(i => {
+            const itemRef = i.elemento || i.item;
+            let nomElem = 'N/A';
+            if (itemRef) {
+              if (typeof itemRef === 'object') {
+                nomElem = itemRef.nombre || itemRef.descripcion || itemRef.titulo || 'N/A';
+              } else {
+                const encontrado = inventarioGlobal.find(el => String(el._id || el.id || el.codigo_placa) === String(itemRef));
+                nomElem = encontrado ? encontrado.nombre : String(itemRef);
+              }
+            }
+            filas.push({
+              'Fecha': fecha,
+              'Docente': docente,
+              'Estudiante / Uso': p.estudiante_final || p.uso || 'N/A',
+              'Elemento': nomElem,
+              'Cantidad': i.cantidad || 1,
+              'Estado': p.estado
+            });
+          });
+        } else if (p.elemento || p.item) {
+          const itemRef = p.elemento || p.item;
+          let nomElem = 'N/A';
+          if (itemRef) {
+            if (typeof itemRef === 'object') {
+              nomElem = itemRef.nombre || itemRef.descripcion || itemRef.titulo || 'N/A';
+            } else {
+              const encontrado = inventarioGlobal.find(el => String(el._id || el.id || el.codigo_placa) === String(itemRef));
+              nomElem = encontrado ? encontrado.nombre : String(itemRef);
+            }
+          }
+          filas.push({
+            'Fecha': fecha,
+            'Docente': docente,
+            'Estudiante / Uso': p.estudiante_final || p.uso || 'N/A',
+            'Elemento': nomElem,
+            'Cantidad': p.cantidad_solicitada || p.cantidad || 1,
+            'Estado': p.estado
+          });
+        }
+      });
+
+      const hoja = XLSX.utils.json_to_sheet(filas);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Historial_Prestamos");
+      XLSX.writeFile(libro, "Historial_Solicitudes.xlsx");
+    }
+
+    cargarDatos();
+  </script>
+</body>
+</html>

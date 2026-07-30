@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solicitud de Activos de Operación</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f0f2f5; color: #333; }
+    .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 1000px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+    label { font-weight: bold; font-size: 0.85em; margin-bottom: 5px; display: block; }
+    input, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    .full-width { grid-column: span 2; }
+    button { cursor: pointer; padding: 10px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; }
+    .btn-agregar { background-color: #319795; margin-top: 10px; width: 100%; }
+    .btn-excel { background-color: #27ae60; font-size: 1.05em; }
+    .btn-admin { background-color: #2b6cb0; font-size: 1.05em; }
+    .btn-volver { background-color: #718096; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #cbd5e0; padding: 8px; text-align: left; font-size: 0.9em; }
+    th { background-color: #2b6cb0; color: white; }
+    .acciones-finales { display: flex; gap: 10px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="header">
+      <h2>Solicitud de Activos de Operación (Nuevos Insumos)</h2>
+      <button class="btn-volver" onclick="window.location.href='docente.html'">⬅ Volver al Panel</button>
+    </div>
+
+    <!-- Formulario de ingreso de activo -->
+    <div class="form-grid">
+      <div>
+        <label>Código de Material (Referencia / Placa proyectada):</label>
+        <input type="text" id="codigo" placeholder="Ej: MAT-2026-001">
+      </div>
+      <div>
+        <label>Descripción / Nombre General:</label>
+        <input type="text" id="descripcion" placeholder="Ej: Multímetro Digital Profesional">
+      </div>
+      <div class="full-width">
+        <label>Detalle del Material (Uso o justificación):</label>
+        <input type="text" id="detalle" placeholder="Ej: Requerido para prácticas del laboratorio de Electrónica">
+      </div>
+      <div class="full-width">
+        <label>Especificaciones (Medidas, colores, materiales, marca, etc.):</label>
+        <textarea id="especificaciones" rows="2" placeholder="Ej: Marca Fluke, RMS verdadero, rango automático, medición de temperatura."></textarea>
+      </div>
+      <div class="full-width">
+        <label>URL de Validación (Enlace del producto o ficha técnica):</label>
+        <input type="url" id="url-referencia" placeholder="Ej: https://tienda.com/producto/multimetro-fluke">
+      </div>
+    </div>
+
+    <button type="button" class="btn-agregar" onclick="agregarElemento()">➕ Agregar a la Lista</button>
+
+    <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
+
+    <h3>Lista de Activos a Solicitar</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Descripción</th>
+          <th>Detalle</th>
+          <th>Especificaciones</th>
+          <th>URL Validación</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-activos">
+        <tr>
+          <td colspan="6" style="text-align: center; color: #a0aec0;">No hay activos agregados a la lista.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Botones de salida / envío -->
+    <div class="acciones-finales">
+      <button type="button" class="btn-excel" onclick="exportarAExcel()" style="flex: 1;">📊 Descargar Excel (Jefatura)</button>
+      <button type="button" class="btn-admin" onclick="enviarAlAdministrador()" style="flex: 1;">📤 Enviar Solicitud a Almacén</button>
+    </div>
+  </div>
+
+  <script>
+    let listaActivos = [];
+
+    function agregarElemento() {
+      const codigo = document.getElementById('codigo').value.trim();
+      const descripcion = document.getElementById('descripcion').value.trim();
+      const detalle = document.getElementById('detalle').value.trim();
+      const especificaciones = document.getElementById('especificaciones').value.trim();
+      const url = document.getElementById('url-referencia').value.trim();
+
+      if (!descripcion || !especificaciones) {
+        alert('Por favor completa al menos la descripción y las especificaciones.');
+        return;
+      }
+
+      listaActivos.push({
+        'Código de Material': codigo || 'N/A',
+        'Descripción': descripcion,
+        'Detalle del Material': detalle || 'N/A',
+        'Especificaciones (Medidas, colores, materiales, marca, etc)': especificaciones,
+        'URL de Referencia / Validación': url || 'N/A'
+      });
+
+      // Limpiar campos
+      document.getElementById('codigo').value = '';
+      document.getElementById('descripcion').value = '';
+      document.getElementById('detalle').value = '';
+      document.getElementById('especificaciones').value = '';
+      document.getElementById('url-referencia').value = '';
+
+      renderizarTabla();
+    }
+
+    function eliminarElemento(index) {
+      listaActivos.splice(index, 1);
+      renderizarTabla();
+    }
+
+    function renderizarTabla() {
+      const tbody = document.getElementById('tabla-activos');
+      if (listaActivos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #a0aec0;">No hay activos agregados a la lista.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = listaActivos.map((item, i) => `
+        <tr>
+          <td><b>${item['Código de Material']}</b></td>
+          <td>${item['Descripción']}</td>
+          <td>${item['Detalle del Material']}</td>
+          <td>${item['Especificaciones (Medidas, colores, materiales, marca, etc)']}</td>
+          <td>${item['URL de Referencia / Validación'] !== 'N/A' ? `<a href="${item['URL de Referencia / Validación']}" target="_blank">Ver Enlace</a>` : 'N/A'}</td>
+          <td><button style="background:#e53e3e; padding:5px 10px;" onclick="eliminarElemento(${i})">❌</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function exportarAExcel() {
+      if (listaActivos.length === 0) {
+        alert('Agrega al menos un activo a la lista antes de generar el reporte.');
+        return;
+      }
+
+      const hoja = XLSX.utils.json_to_sheet(listaActivos);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Solicitud_Activos");
+
+      XLSX.writeFile(libro, `Solicitud_Activos_Operacion_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+
+    async function enviarAlAdministrador() {
+      if (listaActivos.length === 0) {
+        alert('Agrega al menos un activo antes de enviar la solicitud.');
+        return;
+      }
+
+      const sesion = JSON.parse(localStorage.getItem('usuarioSesion')) || { nombre: 'Docente General' };
+
+      const payload = {
+        solicitado_por: sesion.nombre,
+        fecha: new Date(),
+        activos: listaActivos
+      };
+
+      try {
+        const res = await fetch('/api/solicitudes-activos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          alert('✅ Solicitud enviada correctamente al administrador del almacén.');
+          listaActivos = [];
+          renderizarTabla();
+        } else {
+          alert('⚠️ Error al enviar la solicitud al servidor.');
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Error de red al conectar con el servidor.');
+      }
+    }
+  </script>
+</body>
+</html>
