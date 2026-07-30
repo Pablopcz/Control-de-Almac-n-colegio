@@ -59,6 +59,63 @@
       flex: 1;
       font-weight: 500;
     }
+
+    /* =========================================
+       ESTILOS RESPONSIVOS PARA CELULARES (MÓVILES)
+       ========================================= */
+    @media (max-width: 768px) {
+      body {
+        margin: 10px;
+      }
+      
+      /* Cambia el contenedor general a una sola columna */
+      .container {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      /* Hace que las tarjetas ocupen todo el ancho y anula la extensión doble */
+      .card.full-width {
+        grid-column: span 1;
+      }
+
+      /* Corrige el encabezado superior amontonado en celulares */
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 15px;
+      }
+
+      .header h2 {
+        font-size: 1.25rem;
+        margin: 0;
+      }
+
+      .header > div {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 8px;
+      }
+
+      .header .btn-salir {
+        margin-left: 0 !important;
+        width: 100%;
+      }
+
+      /* Hace que las tablas tengan scroll horizontal si no caben en la pantalla */
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+
+      /* Ajusta los contenedores de botones secundarios para que no se desborden */
+      .card div[style*="display: flex"] {
+        flex-direction: column;
+      }
+    }
   </style>
 </head>
 <body>
@@ -157,7 +214,7 @@
 
     <!-- TABLA INFERIOR: Mis Solicitudes Enviadas con Scroll y Filtro Ajustado -->
     <div class="card full-width">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
         <h3 style="margin: 0;">Mis Solicitudes Realizadas</h3>
         <button class="btn-excel" onclick="descargarExcelMisPrestamos()">📊 Descargar Historial (Excel)</button>
       </div>
@@ -194,15 +251,13 @@
     let carrito = [];
     let inventarioGlobal = [];
 
-    
     // Validar Sesión al cargar
-const sesion = JSON.parse(localStorage.getItem('usuarioSesion'));
-if (!sesion || sesion.rol !== 'Docente') {
-  window.location.href = '/index.html';
-} else {
-  // Se usa 'nombre_completo' o 'nombre' dependiendo de lo que devuelva tu backend
-  document.getElementById('nombre-docente').textContent = `Docente: ${sesion.nombre_completo || sesion.nombre}`;
-}
+    const sesion = JSON.parse(localStorage.getItem('usuarioSesion'));
+    if (!sesion || sesion.rol !== 'Docente') {
+      window.location.href = '/index.html';
+    } else {
+      document.getElementById('nombre-docente').textContent = `Docente: ${sesion.nombre_completo || sesion.nombre}`;
+    }
 
     function cerrarSesion() {
       localStorage.removeItem('usuarioSesion');
@@ -481,7 +536,6 @@ if (!sesion || sesion.rol !== 'Docente') {
     }
 
     // EXPORTAR HISTORIAL A EXCEL (Respeta el filtro aplicado)
-    // EXPORTAR HISTORIAL A EXCEL (Respeta el filtro aplicado)
     async function descargarExcelMisPrestamos() {
       try {
         const res = await fetch(`${API_URL}/prestamos`);
@@ -570,7 +624,6 @@ if (!sesion || sesion.rol !== 'Docente') {
         const libro = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(libro, hoja, "Mis Solicitudes");
 
-        // Uso seguro del nombre del docente (verifica nombre_completo o nombre)
         const nombreDocente = sesion.nombre_completo || sesion.nombre || 'Docente';
         const nombreArchivo = `Mis_Solicitudes_${nombreDocente.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`;
         XLSX.writeFile(libro, nombreArchivo);
@@ -583,80 +636,53 @@ if (!sesion || sesion.rol !== 'Docente') {
 
     // FUNCIONES PARA ACTIVOS DE OPERACIÓN
     function procesarExcelSubido(event) {
-  const archivo = event.target.files[0];
-  if (!archivo) return;
+      const archivo = event.target.files[0];
+      if (!archivo) return;
 
-  document.getElementById('label-subir-archivo').textContent =
-    `📂 ${archivo.name}`;
+      document.getElementById('label-subir-archivo').textContent = `📂 ${archivo.name}`;
 
-  const lector = new FileReader();
+      const lector = new FileReader();
 
-  lector.onload = async function(e) {
+      lector.onload = async function(e) {
+        try {
+          const datosBinarios = new Uint8Array(e.target.result);
+          const libro = XLSX.read(datosBinarios, { type: 'array' });
+          const nombreHoja = libro.SheetNames[0];
+          const hoja = libro.Sheets[nombreHoja];
 
-    try {
+          const formData = new FormData();
+          formData.append('archivo', archivo);
+          formData.append('docente', sesion.nombre_completo || sesion.nombre);
 
-      const datosBinarios = new Uint8Array(e.target.result);
-      const libro = XLSX.read(datosBinarios, { type: 'array' });
+          const respuesta = await fetch('/api/activos', {
+            method: 'POST',
+            body: formData
+          });
 
-      const nombreHoja = libro.SheetNames[0];
-      const hoja = libro.Sheets[nombreHoja];
+          const data = await respuesta.json();
 
-      
+          if (!respuesta.ok) {
+            throw new Error(data.mensaje);
+          }
 
-    
-      const formData = new FormData();
+          alert('✅ Solicitud de Activos enviada correctamente al Almacén');
 
-formData.append('archivo', archivo);
+        } catch (error) {
+          console.error(error);
+          alert('❌ Error al enviar la solicitud de activos');
+        } finally {
+          event.target.value = '';
+        }
+      };
 
-formData.append(
-  'docente',
-  sesion.nombre_completo || sesion.nombre
-);
-
-const respuesta = await fetch(
-  '/api/activos',
-  {
-    method: 'POST',
-    body: formData
-  }
-);
-
-      const data = await respuesta.json();
-
-      if (!respuesta.ok) {
-        throw new Error(data.mensaje);
-      }
-
-      alert('✅ Solicitud de Activos enviada correctamente al Almacén');
-
-    } catch (error) {
-
-      console.error(error);
-
-      alert('❌ Error al enviar la solicitud de activos');
-
-    } finally {
-
-      event.target.value = '';
-
+      lector.readAsArrayBuffer(archivo);
     }
 
-  };
+    function descargarFormatoActivos() {
+      window.open('/api/descargar-formato-activos', '_blank');
+    }
 
-  lector.readAsArrayBuffer(archivo);
-
-}
-function descargarFormatoActivos() {
-  window.open(
-    '/api/descargar-formato-activos',
-    '_blank'
-  );
-}
-
-window.addEventListener(
-  'DOMContentLoaded',
-  cargarDatos
-);
+    window.addEventListener('DOMContentLoaded', cargarDatos);
   </script>
 </body>
 </html>
